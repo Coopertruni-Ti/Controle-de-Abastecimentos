@@ -81,23 +81,6 @@ if "data_loaded" not in st.session_state:
         else:
             # Marcar falha de carregamento para não ficar em loop de "carregando"
             st.session_state["data_loaded"] = False
-
-# ============= LOGO E HEADER =============
-col1, col2, col3 = st.columns([1, 3, 1])
-
-with col1:
-    # Espaço reservado (sem logo)
-    st.empty()
-
-with col2:
-    st.title("🛢️ Dashboard de Abastecimentos")
-    st.caption("Gestão Inteligente de Combustível")
-
-with col3:
-    if "data_loaded" in st.session_state and st.session_state["data_loaded"]:
-        tempo_atualizacao = st.session_state.get("last_update", datetime.now())
-        st.metric("📊 Status", "Ativo", help=f"Última atualização: {tempo_atualizacao.strftime('%H:%M:%S')}")
-
 # ============= SIDEBAR MELHORADA =============
 render_sidebar_lancar_abastecimento()
 
@@ -118,7 +101,6 @@ df_veiculos = st.session_state["df_veiculos"]
 df_abastecimentos = st.session_state["df_abastecimentos"]
 
 # ============= HOME PAGE =============
-st.markdown("---")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -136,7 +118,6 @@ with col4:
     st.metric("💵 Preço Médio", f"R$ {preco_medio:.2f}/L", help="Preço médio por litro")
 
 # ============= CARDS DE INFORMAÇÕES =============
-st.markdown("---")
 st.subheader("📊 Panorama da Frota")
 
 col1, col2, col3, col4 = st.columns(4)
@@ -160,7 +141,6 @@ with col4:
     st.info(f"**📅 Período**\n{dias} dias", icon="📅")
 
 # ============= SEÇÃO DE ANÁLISES =============
-st.markdown("---")
 st.subheader("📈 Análises Rápidas")
 
 tab1, tab2, tab3 = st.tabs(["Por Motorista", "Por Veículo", "Por Posto"])
