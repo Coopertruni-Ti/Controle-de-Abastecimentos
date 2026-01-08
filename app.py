@@ -26,9 +26,15 @@ def load_google_sheets():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 
+        # Tentar acessar secrets (Cloud ou secrets.toml local)
+        try:
+            secrets = st.secrets
+        except Exception:
+            secrets = {}
+
         # Preferir credenciais vindas de st.secrets (Streamlit Cloud)
-        if "gcp_service_account" in st.secrets:
-            service_account_info = dict(st.secrets["gcp_service_account"])
+        if isinstance(secrets, dict) and "gcp_service_account" in secrets:
+            service_account_info = dict(secrets["gcp_service_account"])
             creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
         else:
             # Fallback para arquivo local (desenvolvimento)
@@ -38,8 +44,8 @@ def load_google_sheets():
 
         # Permitir sobrepor o ID da planilha via secrets, se desejado
         sheet_id = GOOGLE_SHEETS_ID
-        if "GOOGLE_SHEETS_ID" in st.secrets:
-            sheet_id = st.secrets["GOOGLE_SHEETS_ID"]
+        if isinstance(secrets, dict) and "GOOGLE_SHEETS_ID" in secrets:
+            sheet_id = secrets["GOOGLE_SHEETS_ID"]
 
         spreadsheet = client.open_by_key(sheet_id)
 
@@ -49,11 +55,13 @@ def load_google_sheets():
         df_abastecimentos = pd.DataFrame(spreadsheet.worksheet("ABASTECIMENTOS").get_all_records())
 
         # Converter datas (formato brasileiro DD/MM/YYYY)
-        if not df_abastecimentos.empty and "DATA" in df_abastecimentos.columns:
+        if "DATA" in df_abastecimentos.columns:
             df_abastecimentos["DATA"] = pd.to_datetime(df_abastecimentos["DATA"], format="%d/%m/%Y", errors="coerce")
 
         return df_pessoas, df_veiculos, df_abastecimentos, True
     except Exception as e:
+        # Exibir erro para facilitar diagnóstico (especialmente no Streamlit Cloud)
+        st.error(f"❌ Erro ao carregar dados do Google Sheets: {e}")
         return None, None, None, False
 
 
@@ -62,13 +70,17 @@ if "data_loaded" not in st.session_state:
     with st.spinner("⏳ Carregando dados do Google Sheets..."):
         df_pessoas, df_veiculos, df_abastecimentos, success = load_google_sheets()
 
-        if success and df_abastecimentos is not None and not df_abastecimentos.empty:
+        # Considerar carregamento bem-sucedido mesmo que não haja registros ainda
+        if success and df_abastecimentos is not None:
             st.session_state["df_pessoas"] = df_pessoas
             st.session_state["df_veiculos"] = df_veiculos
             st.session_state["df_abastecimentos"] = df_abastecimentos
             st.session_state["data_loaded"] = True
             st.session_state["last_update"] = datetime.now()
             st.rerun()
+        else:
+            # Marcar falha de carregamento para não ficar em loop de "carregando"
+            st.session_state["data_loaded"] = False
 
 # ============= LOGO E HEADER =============
 col1, col2, col3 = st.columns([1, 3, 1])

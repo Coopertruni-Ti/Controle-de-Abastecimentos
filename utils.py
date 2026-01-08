@@ -32,9 +32,15 @@ def _get_sheets_client():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 
+        # Tentar acessar secrets (Cloud ou secrets.toml local)
+        try:
+            secrets = st.secrets
+        except Exception:
+            secrets = {}
+
         # Preferir credenciais vindas de st.secrets (Streamlit Cloud)
-        if "gcp_service_account" in st.secrets:
-            service_account_info = dict(st.secrets["gcp_service_account"])
+        if isinstance(secrets, dict) and "gcp_service_account" in secrets:
+            service_account_info = dict(secrets["gcp_service_account"])
             creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
         else:
             # Fallback para arquivo local (desenvolvimento)
@@ -44,8 +50,8 @@ def _get_sheets_client():
 
         # Permitir sobrepor o ID da planilha via secrets, se desejado
         sheet_id = GOOGLE_SHEETS_ID
-        if "GOOGLE_SHEETS_ID" in st.secrets:
-            sheet_id = st.secrets["GOOGLE_SHEETS_ID"]
+        if isinstance(secrets, dict) and "GOOGLE_SHEETS_ID" in secrets:
+            sheet_id = secrets["GOOGLE_SHEETS_ID"]
 
         return client.open_by_key(sheet_id)
     except Exception as e:
