@@ -26,37 +26,45 @@ def load_google_sheets():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 
-        # Tentar acessar secrets (Cloud ou secrets.toml local)
+        # Preferir credenciais vindas de st.secrets (Streamlit Cloud ou secrets.toml local)
         try:
-            secrets = st.secrets
+            if "gcp_service_account" in st.secrets:
+                service_account_info = dict(st.secrets["gcp_service_account"])
+                creds = Credentials.from_service_account_info(
+                    service_account_info, scopes=scopes)
+            else:
+                # Fallback para arquivo local (desenvolvimento)
+                creds = Credentials.from_service_account_file(
+                    CREDS_FILE, scopes=scopes)
         except Exception:
-            secrets = {}
-
-        # Preferir credenciais vindas de st.secrets (Streamlit Cloud)
-        if isinstance(secrets, dict) and "gcp_service_account" in secrets:
-            service_account_info = dict(secrets["gcp_service_account"])
-            creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
-        else:
-            # Fallback para arquivo local (desenvolvimento)
-            creds = Credentials.from_service_account_file(CREDS_FILE, scopes=scopes)
+            # Se algo der errado com st.secrets, tenta arquivo local
+            creds = Credentials.from_service_account_file(
+                CREDS_FILE, scopes=scopes)
 
         client = gspread.authorize(creds)
 
         # Permitir sobrepor o ID da planilha via secrets, se desejado
         sheet_id = GOOGLE_SHEETS_ID
-        if isinstance(secrets, dict) and "GOOGLE_SHEETS_ID" in secrets:
-            sheet_id = secrets["GOOGLE_SHEETS_ID"]
+        try:
+            if "GOOGLE_SHEETS_ID" in st.secrets:
+                sheet_id = st.secrets["GOOGLE_SHEETS_ID"]
+        except Exception:
+            pass
 
         spreadsheet = client.open_by_key(sheet_id)
 
         # Carregar abas
-        df_pessoas = pd.DataFrame(spreadsheet.worksheet("PESSOAS").get_all_records())
-        df_veiculos = pd.DataFrame(spreadsheet.worksheet("VEICULOS").get_all_records())
-        df_abastecimentos = pd.DataFrame(spreadsheet.worksheet("ABASTECIMENTOS").get_all_records())
+        df_pessoas = pd.DataFrame(
+            spreadsheet.worksheet("PESSOAS").get_all_records())
+        df_veiculos = pd.DataFrame(
+            spreadsheet.worksheet("VEICULOS").get_all_records())
+        df_abastecimentos = pd.DataFrame(
+            spreadsheet.worksheet("ABASTECIMENTOS").get_all_records())
 
         # Converter datas (formato brasileiro DD/MM/YYYY)
         if "DATA" in df_abastecimentos.columns:
-            df_abastecimentos["DATA"] = pd.to_datetime(df_abastecimentos["DATA"], format="%d/%m/%Y", errors="coerce")
+            df_abastecimentos["DATA"] = pd.to_datetime(
+                df_abastecimentos["DATA"], format="%d/%m/%Y", errors="coerce")
 
         return df_pessoas, df_veiculos, df_abastecimentos, True
     except Exception as e:
@@ -105,17 +113,21 @@ df_abastecimentos = st.session_state["df_abastecimentos"]
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric("⛽ Abastecimentos", f"{len(df_abastecimentos):,}", help="Total de registros de abastecimento")
+    st.metric("⛽ Abastecimentos", f"{len(df_abastecimentos):,}",
+              help="Total de registros de abastecimento")
 
 with col2:
-    st.metric("🛢️ Volume Total", f"{df_abastecimentos['LITROS'].sum():,.0f} L", help="Litros totais abastecidos")
+    st.metric("🛢️ Volume Total",
+              f"{df_abastecimentos['LITROS'].sum():,.0f} L", help="Litros totais abastecidos")
 
 with col3:
-    st.metric("💰 Investimento", f"R$ {df_abastecimentos['VALOR_TOTAL'].sum():,.2f}", help="Valor total investido")
+    st.metric("💰 Investimento",
+              f"R$ {df_abastecimentos['VALOR_TOTAL'].sum():,.2f}", help="Valor total investido")
 
 with col4:
     preco_medio = df_abastecimentos["VALOR_UNITARIO"].mean()
-    st.metric("💵 Preço Médio", f"R$ {preco_medio:.2f}/L", help="Preço médio por litro")
+    st.metric("💵 Preço Médio",
+              f"R$ {preco_medio:.2f}/L", help="Preço médio por litro")
 
 # ============= CARDS DE INFORMAÇÕES =============
 st.subheader("📊 Panorama da Frota")
@@ -123,7 +135,8 @@ st.subheader("📊 Panorama da Frota")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    motoristas = df_pessoas[df_pessoas["TIPO"] == "MOTORISTA"]["NOME"].nunique()
+    motoristas = df_pessoas[df_pessoas["TIPO"]
+                            == "MOTORISTA"]["NOME"].nunique()
     st.info(f"**👤 Motoristas**\n{motoristas}", icon="👤")
 
 with col2:
@@ -148,30 +161,39 @@ tab1, tab2, tab3 = st.tabs(["Por Motorista", "Por Veículo", "Por Posto"])
 with tab1:
     st.markdown("#### 👤 Top 10 Motoristas por Consumo")
 
-    df_mot = df_abastecimentos.groupby("ID_MOTORISTA").agg({"LITROS": "sum", "VALOR_TOTAL": "sum", "ID": "count"}).reset_index()
+    df_mot = df_abastecimentos.groupby("ID_MOTORISTA").agg(
+        {"LITROS": "sum", "VALOR_TOTAL": "sum", "ID": "count"}).reset_index()
 
     # Mapear nomes
-    motoristas_map = df_pessoas[df_pessoas["TIPO"] == "MOTORISTA"].set_index("ID")["NOME"].to_dict()
+    motoristas_map = df_pessoas[df_pessoas["TIPO"] == "MOTORISTA"].set_index("ID")[
+        "NOME"].to_dict()
     df_mot["NOME"] = df_mot["ID_MOTORISTA"].map(motoristas_map)
 
-    df_mot = df_mot.dropna(subset=["NOME"]).sort_values("LITROS", ascending=False).head(10)
-    df_mot.columns = ["ID_MOTORISTA", "Litros", "Gasto", "Abastecimentos", "Motorista"]
+    df_mot = df_mot.dropna(subset=["NOME"]).sort_values(
+        "LITROS", ascending=False).head(10)
+    df_mot.columns = ["ID_MOTORISTA", "Litros",
+                      "Gasto", "Abastecimentos", "Motorista"]
 
-    st.dataframe(df_mot[["Motorista", "Abastecimentos", "Litros", "Gasto"]], width="stretch", hide_index=True)
+    st.dataframe(df_mot[["Motorista", "Abastecimentos",
+                 "Litros", "Gasto"]], width="stretch", hide_index=True)
 
 with tab2:
     st.markdown("#### 🚙 Top 10 Veículos por Consumo")
 
-    df_veic = df_abastecimentos.groupby("ID_VEICULO").agg({"LITROS": "sum", "VALOR_TOTAL": "sum", "ID": "count"}).reset_index()
+    df_veic = df_abastecimentos.groupby("ID_VEICULO").agg(
+        {"LITROS": "sum", "VALOR_TOTAL": "sum", "ID": "count"}).reset_index()
 
     # Mapear placas
     placas_map = df_veiculos.set_index("ID")["PLACA"].to_dict()
     df_veic["PLACA"] = df_veic["ID_VEICULO"].map(placas_map)
 
-    df_veic = df_veic.dropna(subset=["PLACA"]).sort_values("LITROS", ascending=False).head(10)
-    df_veic.columns = ["ID_VEICULO", "Litros", "Gasto", "Abastecimentos", "Placa"]
+    df_veic = df_veic.dropna(subset=["PLACA"]).sort_values(
+        "LITROS", ascending=False).head(10)
+    df_veic.columns = ["ID_VEICULO", "Litros",
+                       "Gasto", "Abastecimentos", "Placa"]
 
-    st.dataframe(df_veic[["Placa", "Abastecimentos", "Litros", "Gasto"]], width="stretch", hide_index=True)
+    st.dataframe(df_veic[["Placa", "Abastecimentos", "Litros",
+                 "Gasto"]], width="stretch", hide_index=True)
 
 with tab3:
     st.markdown("#### ⛽ Top 10 Postos por Faturamento")
@@ -183,14 +205,18 @@ with tab3:
     )
 
     # Mapear nomes
-    postos_map = df_pessoas[df_pessoas["TIPO"] == "POSTO"].set_index("ID")["NOME"].to_dict()
+    postos_map = df_pessoas[df_pessoas["TIPO"] == "POSTO"].set_index("ID")[
+        "NOME"].to_dict()
     df_posto["POSTO"] = df_posto["ID_POSTO"].map(postos_map)
 
-    df_posto = df_posto.dropna(subset=["POSTO"]).sort_values("VALOR_TOTAL", ascending=False).head(10)
-    df_posto.columns = ["ID_POSTO", "Faturamento", "Litros", "Preço Médio", "Frequência", "Posto"]
+    df_posto = df_posto.dropna(subset=["POSTO"]).sort_values(
+        "VALOR_TOTAL", ascending=False).head(10)
+    df_posto.columns = ["ID_POSTO", "Faturamento",
+                        "Litros", "Preço Médio", "Frequência", "Posto"]
 
     st.dataframe(
-        df_posto[["Posto", "Frequência", "Litros", "Preço Médio", "Faturamento"]],
+        df_posto[["Posto", "Frequência", "Litros",
+                  "Preço Médio", "Faturamento"]],
         width="stretch",
         hide_index=True,
     )
